@@ -13,6 +13,9 @@ import (
 )
 
 func main() {
+	// Set Gin to release mode for production
+	gin.SetMode(gin.ReleaseMode)
+
 	// Initialize Database
 	config.InitDB()
 

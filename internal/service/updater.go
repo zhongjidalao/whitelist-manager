@@ -3,7 +3,9 @@ package service
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -36,6 +38,28 @@ func CheckAndUpdate() {
 	updateSecurityGroup(settings, currentIP)
 }
 
+// extractIP extracts IPv4 address from text using regex
+func extractIP(text string) string {
+	// IPv4 正则表达式模式
+	ipPattern := regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`)
+	match := ipPattern.FindString(text)
+	if match != "" {
+		// 验证 IP 地址的每个部分是否在 0-255 范围内
+		parts := strings.Split(match, ".")
+		valid := true
+		for _, part := range parts {
+			if num, err := strconv.Atoi(part); err != nil || num < 0 || num > 255 {
+				valid = false
+				break
+			}
+		}
+		if valid {
+			return match
+		}
+	}
+	return ""
+}
+
 func getCurrentIP(servicesStr string) string {
 	services := strings.Split(servicesStr, "\n")
 	client := &http.Client{Timeout: 5 * time.Second}
@@ -56,10 +80,21 @@ func getCurrentIP(servicesStr string) string {
 		if resp.StatusCode == 200 {
 			body, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
-			ip := strings.TrimSpace(string(body))
+			responseText := strings.TrimSpace(string(body))
+
+			// 尝试从响应文本中提取 IP 地址
+			ip := extractIP(responseText)
+
+			// 如果提取失败，尝试直接使用响应内容（兼容纯 IP 响应）
+			if ip == "" && net.ParseIP(responseText) != nil {
+				ip = responseText
+			}
+
 			if ip != "" {
 				config.Log("INFO", fmt.Sprintf("当前公网IP: %s (来源: %s)", ip, url))
 				return ip
+			} else {
+				config.Log("WARNING", fmt.Sprintf("从 %s 无法解析IP地址，响应内容: %s", url, responseText))
 			}
 		} else {
 			resp.Body.Close()

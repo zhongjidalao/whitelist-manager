@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # 当推送 v 开头的 tag 时触发，例如 v1.0.0
+  workflow_dispatch:  # 允许手动触发
+
+permissions:
+  contents: write  # 需要写权限来创建 release
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.20'
+
+      - name: Get version
+        id: version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION="dev-$(git rev-parse --short HEAD)"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      - name: Build for linux/amd64
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: 1
+        run: |
+          go build -o volcengine-whitelist-manager-linux-amd64 \
+            -ldflags "-s -w -X main.Version=${{ steps.version.outputs.version }}" \
+            cmd/server/main.go
+          chmod +x volcengine-whitelist-manager-linux-amd64
+
+      - name: Build for linux/arm64
+        env:
+          GOOS: linux
+          GOARCH: arm64
+          CGO_ENABLED: 1
+          CC: aarch64-linux-gnu-gcc
+        run: |
+          # 安装交叉编译工具
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+          go build -o volcengine-whitelist-manager-linux-arm64 \
+            -ldflags "-s -w -X main.Version=${{ steps.version.outputs.version }}" \
+            cmd/server/main.go
+          chmod +x volcengine-whitelist-manager-linux-arm64
+
+      - name: Create Release Archive
+        run: |
+          # 创建 amd64 压缩包
+          tar -czf volcengine-whitelist-manager-linux-amd64.tar.gz \
+            volcengine-whitelist-manager-linux-amd64 \
+            templates/ \
+            README.md \
+            LICENSE
+
+          # 创建 arm64 压缩包
+          tar -czf volcengine-whitelist-manager-linux-arm64.tar.gz \
+            volcengine-whitelist-manager-linux-arm64 \
+            templates/ \
+            README.md \
+            LICENSE
+
+          # 生成 SHA256 校验和
+          sha256sum volcengine-whitelist-manager-linux-amd64.tar.gz > checksums.txt
+          sha256sum volcengine-whitelist-manager-linux-arm64.tar.gz >> checksums.txt
+
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          # 获取最新的 tag 和上一个 tag
+          CURRENT_TAG=${{ steps.version.outputs.version }}
+          PREV_TAG=$(git describe --tags --abbrev=0 $CURRENT_TAG^ 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            # 如果没有上一个 tag，获取所有 commit
+            COMMITS=$(git log --pretty=format:"%h %s" --no-merges)
+          else
+            # 获取两个 tag 之间的 commit
+            COMMITS=$(git log --pretty=format:"%h %s" --no-merges $PREV_TAG..$CURRENT_TAG)
+          fi
+
+          # 保存到文件
+          echo "Changelog" > changelog.txt
+          echo "$COMMITS" >> changelog.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            volcengine-whitelist-manager-linux-amd64.tar.gz
+            volcengine-whitelist-manager-linux-arm64.tar.gz
+            checksums.txt
+          body_path: changelog.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

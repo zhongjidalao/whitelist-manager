@@ -20,8 +20,6 @@ volcengine-updater
 *.swp
 *.swo
 
-.spec-workflow/
-
 # OS
 .DS_Store
 Thumbs.db
@@ -31,3 +29,11 @@ Thumbs.db
 *.log
 instance/
 !instance/.keep
+
+# AI & Tools
+.claude/
+.spec-workflow/
+.cursor/
+.windsurf/
+GEMINI.md
+CLAUDE.md

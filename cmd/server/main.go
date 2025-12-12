@@ -6,6 +6,7 @@ import (
 
 	"volcengine-whitelist-manager/internal/config"
 	"volcengine-whitelist-manager/internal/service"
+	"volcengine-whitelist-manager/internal/templates"
 	"volcengine-whitelist-manager/internal/web"
 
 	"github.com/gin-gonic/gin"
@@ -22,7 +23,7 @@ func main() {
 	// Initialize Scheduler
 	c := cron.New()
 	settings := config.GetSettings()
-	
+
 	var jobID cron.EntryID
 	if settings.CheckInterval > 0 {
 		id, err := c.AddFunc(fmt.Sprintf("@every %ds", settings.CheckInterval), service.CheckAndUpdate)
@@ -37,7 +38,11 @@ func main() {
 
 	// Initialize Web Server
 	r := gin.Default()
-	r.LoadHTMLGlob("templates/*")
+
+	// Load embedded templates
+	if err := templates.LoadTemplates(r); err != nil {
+		log.Fatal("Failed to load templates: ", err)
+	}
 	// r.Static("/static", "./static")
 
 	h := &web.Handler{

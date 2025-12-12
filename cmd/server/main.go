@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"log"
 
-	"volcengine-updater/internal/config"
-	"volcengine-updater/internal/service"
-	"volcengine-updater/internal/web"
+	"volcengine-whitelist-manager/internal/config"
+	"volcengine-whitelist-manager/internal/service"
+	"volcengine-whitelist-manager/internal/web"
 
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron/v3"

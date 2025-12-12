@@ -3,7 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"volcengine-updater/internal/models"
+	"volcengine-whitelist-manager/internal/models"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"

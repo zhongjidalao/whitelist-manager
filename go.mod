@@ -1,4 +1,4 @@
-module volcengine-updater
+module volcengine-whitelist-manager
 
 go 1.20
 

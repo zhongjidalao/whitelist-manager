@@ -2,7 +2,7 @@
 /bin/
 /dist/
 main
-volcengine-updater
+volcengine-whitelist-manager
 *.exe
 *.exe~
 *.dll

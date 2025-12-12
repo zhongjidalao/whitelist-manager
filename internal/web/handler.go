@@ -5,9 +5,9 @@ import (
 	"math"
 	"net/http"
 	"strconv"
-	"volcengine-updater/internal/config"
-	"volcengine-updater/internal/models"
-	"volcengine-updater/internal/service"
+	"volcengine-whitelist-manager/internal/config"
+	"volcengine-whitelist-manager/internal/models"
+	"volcengine-whitelist-manager/internal/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron/v3"

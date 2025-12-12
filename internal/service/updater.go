@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"volcengine-updater/internal/config"
-	"volcengine-updater/internal/models"
+	"volcengine-whitelist-manager/internal/config"
+	"volcengine-whitelist-manager/internal/models"
 
 	"github.com/volcengine/volcengine-go-sdk/service/vpc"
 	"github.com/volcengine/volcengine-go-sdk/volcengine"
@@ -94,7 +94,7 @@ func updateSecurityGroup(settings *models.Settings, currentIP string) {
 	}
 
 	if len(ports) == 0 {
-		config.Log("WARNING", "未配置有效的SSH端口 (请使用逗号分隔，例如: 22,8080)")
+		config.Log("WARNING", "未配置有效的端口 (请使用逗号分隔，例如: 22,8080)")
 		return
 	}
 
@@ -111,7 +111,7 @@ func updateSecurityGroup(settings *models.Settings, currentIP string) {
 
 	for _, targetPort := range ports {
 		var existingRule *vpc.PermissionForDescribeSecurityGroupAttributesOutput
-		description := fmt.Sprintf("SSH访问(端口%d) - Go脚本自动更新", targetPort)
+		description := fmt.Sprintf("白名单访问(端口%d) - Go脚本自动更新", targetPort)
 
 		// Find existing SSH rule for THIS port
 		for _, perm := range output.Permissions {

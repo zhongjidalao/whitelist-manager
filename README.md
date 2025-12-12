@@ -1,8 +1,8 @@
-# Volcengine SSH IP Updater
+# Volcengine Whitelist Manager
 
 <div align="center">
 
-**自动更新火山引擎安全组 SSH 访问规则的智能工具**
+**自动更新火山引擎安全组白名单访问规则的智能工具**
 
 [![Go Version](https://img.shields.io/badge/Go-1.20+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -15,14 +15,14 @@
 
 ## 📖 项目简介
 
-Volcengine SSH IP Updater 是一个基于 Go 语言开发的自动化工具,用于实时监控您的公网 IP 地址变化,并自动更新火山引擎(Volcengine)安全组的 SSH 入站规则,确保只有您当前的 IP 地址可以访问服务器。
+Volcengine Whitelist Manager 是一个基于 Go 语言开发的自动化工具,用于实时监控您的公网 IP 地址变化,并自动更新火山引擎(Volcengine)安全组的白名单访问规则,确保只有您当前的 IP 地址可以访问服务器。
 
 ### 🎯 使用场景
 
 - **动态 IP 环境**: 家庭宽带、移动办公等场景下 IP 地址频繁变化
-- **安全加固**: 限制 SSH 访问来源,防止暴力破解和未授权访问
+- **安全加固**: 限制服务访问来源,防止暴力破解和未授权访问
 - **远程办公**: 自动适应不同网络环境,无需手动修改安全组规则
-- **多端口管理**: 同时管理多个服务端口的访问控制
+- **多端口管理**: 同时管理多个服务端口的白名单访问控制
 
 ### ✨ 核心特性
 
@@ -41,7 +41,7 @@ Volcengine SSH IP Updater 是一个基于 Go 语言开发的自动化工具,用�
 ## 🏗️ 项目架构
 
 ```text
-volcengine-updater/
+volcengine-whitelist-manager/
 ├── cmd/
 │   └── server/
 │       └── main.go           # 应用程序入口点
@@ -89,16 +89,16 @@ volcengine-updater/
 ```bash
 # 1. 克隆仓库
 git clone <repository-url>
-cd volcengine-updater
+cd volcengine-whitelist-manager
 
 # 2. 安装依赖
 go mod tidy
 
 # 3. 编译二进制文件
-go build -o volcengine-updater cmd/server/main.go
+go build -o volcengine-whitelist-manager cmd/server/main.go
 
 # 4. 运行程序
-./volcengine-updater
+./volcengine-whitelist-manager
 ```
 
 #### 方法二: 直接运行(开发模式)
@@ -123,7 +123,7 @@ go run cmd/server/main.go
    | Secret Key | 火山引擎私钥 | *** |
    | Region | 安全组所在区域 | `cn-beijing`, `cn-shanghai` |
    | Security Group ID | 目标安全组 ID | `sg-xxxxxx` |
-   | SSH Port | 需要管理的端口 | `22` 或 `22,8080,3389` |
+   | Ports | 需要管理的端口 | `22` 或 `22,8080,3389` |
    | Check Interval | 检查间隔 | `15` (分钟) |
    | IP Services | IP 查询服务列表 | 默认已配置多个备用源 |
 
@@ -174,7 +174,7 @@ POST /logs/clear
 
 ### 多端口配置
 
-在 "SSH Port" 字段中使用逗号分隔多个端口:
+在 "Ports" 字段中使用逗号分隔多个端口:
 
 ```
 22,8080,3389,5000
@@ -222,11 +222,11 @@ go fmt ./...
 
 ```bash
 # 编译优化版本(减小体积)
-go build -ldflags="-s -w" -o volcengine-updater cmd/server/main.go
+go build -ldflags="-s -w" -o volcengine-whitelist-manager cmd/server/main.go
 
 # 跨平台编译
-GOOS=linux GOARCH=amd64 go build -o volcengine-updater-linux cmd/server/main.go
-GOOS=windows GOARCH=amd64 go build -o volcengine-updater.exe cmd/server/main.go
+GOOS=linux GOARCH=amd64 go build -o volcengine-whitelist-manager-linux cmd/server/main.go
+GOOS=windows GOARCH=amd64 go build -o volcengine-whitelist-manager.exe cmd/server/main.go
 ```
 
 ---

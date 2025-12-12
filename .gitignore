@@ -1,0 +1,33 @@
+# Binaries
+/bin/
+/dist/
+main
+volcengine-updater
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Modules
+# go.sum is usually committed in Go projects to ensure reproducible builds, 
+# but if you want to ignore it, uncomment the next line.
+# go.sum
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+.spec-workflow/
+
+# OS
+.DS_Store
+Thumbs.db
+.directory
+
+# Logs & Data
+*.log
+instance/
+!instance/.keep

@@ -1,0 +1,60 @@
+{{ template "header.html" . }}
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-white">
+                <h4 class="mb-0">系统设置</h4>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    <div class="mb-3">
+                        <label for="access_key" class="form-label">Volcengine Access Key ID</label>
+                        <input type="text" class="form-control" id="access_key" name="access_key" value="{{ .Settings.AccessKey }}" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="secret_key" class="form-label">Volcengine Secret Access Key</label>
+                        <input type="password" class="form-control" id="secret_key" name="secret_key" value="{{ .Settings.SecretKey }}" required>
+                        <div class="form-text">密钥将明文保存在本地 SQLite 数据库中，请确保服务器安全。</div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="region" class="form-label">区域 (Region)</label>
+                            <input type="text" class="form-control" id="region" name="region" value="{{ .Settings.Region }}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="security_group_id" class="form-label">安全组 ID</label>
+                            <input type="text" class="form-control" id="security_group_id" name="security_group_id" value="{{ .Settings.SecurityGroupID }}" required>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="ssh_port" class="form-label">SSH 端口</label>
+                            <input type="number" class="form-control" id="ssh_port" name="ssh_port" value="{{ .Settings.SSHPort }}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="check_interval" class="form-label">检查间隔 (秒)</label>
+                            <input type="number" class="form-control" id="check_interval" name="check_interval" value="{{ .Settings.CheckInterval }}" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="ip_services" class="form-label">IP 查询服务列表</label>
+                        <textarea class="form-control" id="ip_services" name="ip_services" rows="5" required>{{ .Settings.IPServices }}</textarea>
+                        <div class="form-text">每行一个 URL，脚本会按顺序尝试获取公网 IP 地址。</div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> 保存并重启任务
+                    </button>
+                    <a href="/" class="btn btn-secondary">取消</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{ template "footer.html" . }}

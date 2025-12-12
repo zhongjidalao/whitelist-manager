@@ -1,0 +1,51 @@
+{{ template "header.html" . }}
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">当前状态</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>监控状态:</strong> <span class="badge bg-success">运行中</span></p>
+                <p><strong>下次运行:</strong> {{ .NextRun }}</p>
+                <p><strong>检测间隔:</strong> {{ .Settings.CheckInterval }} 秒</p>
+                <p><strong>当前端口:</strong> {{ .Settings.SSHPort }}</p>
+                <hr>
+                <form action="/run_now" method="post">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-play-fill"></i> 立即运行检测
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">最近日志</h5>
+                <a href="/logs" class="btn btn-sm btn-outline-secondary">查看全部</a>
+            </div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush">
+                    {{ if .Logs }}
+                        {{ range .Logs }}
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <small class="text-muted">{{ .Timestamp.Format "2006-01-02 15:04:05" }}</small>
+                                <span class="badge {{ if eq .Level "ERROR" }}bg-danger{{ else if eq .Level "WARNING" }}bg-warning{{ else }}bg-info{{ end }}">{{ .Level }}</span>
+                            </div>
+                            <p class="mb-1 text-break">{{ .Message }}</p>
+                        </div>
+                        {{ end }}
+                    {{ else }}
+                        <div class="p-3 text-center text-muted">暂无日志</div>
+                    {{ end }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{ template "footer.html" . }}

@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**Intelligent Tool for Automatically Updating Volcengine / AWS Lightsail Whitelist Access Rules**
+**Intelligent Tool for Automatically Updating Volcengine / AWS Lightsail / AWS EC2 Whitelist Access Rules**
 
 [![Go Version](https://img.shields.io/badge/Go-1.20+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -23,13 +23,13 @@ Whitelist Manager is an automation tool developed in Go that monitors public IP 
 - **Security Hardening**: Restrict service access sources to prevent brute force attacks and unauthorized access
 - **Remote Work**: Automatically adapt to different network environments without manual security group rule modifications
 - **Multi-Port Management**: Manage whitelist access control for multiple service ports simultaneously
-- **Multi-Cloud Support**: Manage Volcengine security groups and AWS Lightsail firewall rules in one workflow
+- **Multi-Cloud Support**: Manage Volcengine security groups, AWS Lightsail, and AWS EC2 rules in one workflow
 
 ### ✨ Key Features
 
 - 🔄 **Automatic Monitoring**: Periodic public IP change detection (default 15 minutes, customizable)
 - 🔐 **Auto Whitelist Updates**: Real-time synchronization of IP changes to cloud firewall rules
-- ☁️ **Multi-Provider Support**: Supports Volcengine and AWS Lightsail
+- ☁️ **Multi-Provider Support**: Supports Volcengine, AWS Lightsail, and AWS EC2
 - 🌐 **Web Management Interface**: Visual configuration panel and log monitoring
 - 🚀 **Multi-Port Support**: Configure multiple ports at once (e.g., 22,8080,3389), comma-separated
 - 📊 **Complete Log Recording**: All operations are traceable with pagination support and clear function
@@ -121,7 +121,7 @@ go run cmd/server/main.go
 
    | Configuration | Description | Example |
    |--------------|-------------|---------|
-   | Providers | Cloud providers (multi-select) | `volcengine` + `aws` |
+   | Providers | Cloud providers (multi-select) | `volcengine` + `aws` + `aws-ec2` |
    | Volcengine Access Key | Volcengine API access key | `AKLT...` |
    | Volcengine Secret Key | Volcengine API secret key | *** |
    | Volcengine Region | Volcengine region | `cn-beijing` |
@@ -132,6 +132,8 @@ go run cmd/server/main.go
    | AWS Region | Lightsail region | `ap-northeast-1` |
    | AWS Instance Name | Lightsail instance name | `my-lightsail-instance` |
    | AWS Ports | AWS managed ports (comma-separated) | `22,80,443` |
+   | AWS EC2 Security Group ID | EC2 security group ID | `sg-abcdef123456` |
+   | AWS EC2 Ports | AWS EC2 managed ports (comma-separated) | `22,443` |
    | Check Interval | Check interval | `15` (minutes) |
    | IP Services | IP query service list | Multiple backup sources pre-configured |
 
@@ -187,7 +189,8 @@ You can enable multiple providers at the same time and define separate ports:
 
 ```
 Volcengine Ports: 22,3389
-AWS Ports: 22,80,443
+AWS Lightsail Ports: 22,80,443
+AWS EC2 Ports: 22,443
 ```
 
 The program applies whitelist rules independently for each provider.
@@ -269,6 +272,12 @@ A: The instance cannot be found under the current AK/SK + Region. Check:
 - Is `AWS Region` exactly where the instance is deployed?
 - Is `AWS Instance Name` exactly correct (case-sensitive)?
 - Does the AK/SK belong to the correct AWS account?
+
+**Q: AWS EC2 rule update failed?**
+A: Check:
+- Is `AWS EC2 Security Group ID` correct?
+- Does the AK/SK have EC2 security group read/write permissions?
+- Does `AWS Region` match the security group's actual region?
 
 **Q: Volcengine returns `SignatureDoesNotMatch`?**
 A: Signature verification failed. Check:

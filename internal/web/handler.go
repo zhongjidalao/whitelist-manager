@@ -63,6 +63,7 @@ func (h *Handler) GetStatusJSON(c *gin.Context) {
 		"SSHPort":         settings.SSHPort,
 		"VolcenginePorts": firstNonEmpty(settings.VolcenginePorts, settings.SSHPort),
 		"AWSPorts":        firstNonEmpty(settings.AWSPorts, settings.SSHPort),
+		"AWSEC2Ports":     firstNonEmpty(settings.AWSEC2Ports, settings.SSHPort),
 		"Provider":        settings.Provider,
 		"Providers":       providers,
 	})
@@ -115,6 +116,9 @@ func (h *Handler) SettingsPage(c *gin.Context) {
 	if strings.TrimSpace(settings.AWSPorts) == "" {
 		settings.AWSPorts = settings.SSHPort
 	}
+	if strings.TrimSpace(settings.AWSEC2Ports) == "" {
+		settings.AWSEC2Ports = settings.SSHPort
+	}
 
 	// Convert CheckInterval (seconds) to human-readable form
 	intervalValue := settings.CheckInterval
@@ -134,6 +138,7 @@ func (h *Handler) SettingsPage(c *gin.Context) {
 		"CheckIntervalUnit":  intervalUnit,
 		"VolcEnabled":        hasProvider(settings.Providers, "volcengine"),
 		"AWSEnabled":         hasProvider(settings.Providers, "aws"),
+		"AWSEC2Enabled":      hasProvider(settings.Providers, "aws-ec2"),
 	})
 }
 
@@ -148,8 +153,10 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 		AWSSecretKey            string   `form:"aws_secret_key"`
 		AWSRegion               string   `form:"aws_region"`
 		AWSInstanceName         string   `form:"aws_instance_name"`
+		AWSEC2SecurityGroupID   string   `form:"aws_ec2_security_group_id"`
 		VolcenginePorts         string   `form:"volcengine_ports"`
 		AWSPorts                string   `form:"aws_ports"`
+		AWSEC2Ports             string   `form:"aws_ec2_ports"`
 		CheckInterval           int      `form:"check_interval"`
 		IPServices              string   `form:"ip_services"`
 	}
@@ -179,9 +186,11 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 	settings.AWSSecretKey = form.AWSSecretKey
 	settings.AWSRegion = form.AWSRegion
 	settings.AWSInstanceName = form.AWSInstanceName
+	settings.AWSEC2SecurityGroupID = form.AWSEC2SecurityGroupID
 	settings.VolcenginePorts = form.VolcenginePorts
 	settings.AWSPorts = form.AWSPorts
-	settings.SSHPort = firstNonEmpty(form.VolcenginePorts, form.AWSPorts)
+	settings.AWSEC2Ports = form.AWSEC2Ports
+	settings.SSHPort = firstNonEmpty(form.VolcenginePorts, form.AWSPorts, form.AWSEC2Ports)
 	settings.CheckInterval = form.CheckInterval
 	settings.IPServices = form.IPServices
 
@@ -202,7 +211,7 @@ func normalizeProvidersFromForm(rawProviders []string) string {
 	seen := make(map[string]struct{}, len(rawProviders))
 	for _, provider := range rawProviders {
 		provider = strings.ToLower(strings.TrimSpace(provider))
-		if provider != "volcengine" && provider != "aws" {
+		if provider != "volcengine" && provider != "aws" && provider != "aws-ec2" {
 			continue
 		}
 		seen[provider] = struct{}{}
@@ -214,6 +223,9 @@ func normalizeProvidersFromForm(rawProviders []string) string {
 	}
 	if _, ok := seen["aws"]; ok {
 		ordered = append(ordered, "aws")
+	}
+	if _, ok := seen["aws-ec2"]; ok {
+		ordered = append(ordered, "aws-ec2")
 	}
 	return strings.Join(ordered, ",")
 }

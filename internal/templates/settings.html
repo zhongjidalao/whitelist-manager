@@ -18,6 +18,10 @@
                             <input class="form-check-input" type="checkbox" id="provider_aws" name="providers" value="aws" {{ if .AWSEnabled }}checked{{ end }}>
                             <label class="form-check-label" for="provider_aws">AWS Lightsail</label>
                         </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="provider_aws_ec2" name="providers" value="aws-ec2" {{ if .AWSEC2Enabled }}checked{{ end }}>
+                            <label class="form-check-label" for="provider_aws_ec2">AWS EC2</label>
+                        </div>
                         <div class="form-text">可同时启用多个供应商；每个供应商使用独立配置。</div>
                     </div>
 
@@ -49,8 +53,8 @@
                         </div>
                     </div>
 
-                    <div class="border rounded p-3 mb-3" id="aws_section">
-                        <h6 class="mb-3">AWS Lightsail 配置</h6>
+                    <div class="border rounded p-3 mb-3" id="aws_common_section">
+                        <h6 class="mb-3">AWS 通用配置</h6>
                         <div class="mb-3">
                             <label for="aws_access_key" class="form-label">AWS Access Key ID</label>
                             <input type="text" class="form-control" id="aws_access_key" name="aws_access_key" value="{{ .Settings.AWSAccessKey }}">
@@ -66,14 +70,30 @@
                                 <label for="aws_region" class="form-label">区域 (Region)</label>
                                 <input type="text" class="form-control" id="aws_region" name="aws_region" value="{{ .Settings.AWSRegion }}" placeholder="ap-northeast-1">
                             </div>
-                            <div class="col-md-6 mb-3">
-                                <label for="aws_instance_name" class="form-label">Lightsail 实例名称</label>
-                                <input type="text" class="form-control" id="aws_instance_name" name="aws_instance_name" value="{{ .Settings.AWSInstanceName }}">
-                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border rounded p-3 mb-3" id="aws_lightsail_section">
+                        <h6 class="mb-3">AWS Lightsail 配置</h6>
+                        <div class="mb-3">
+                            <label for="aws_instance_name" class="form-label">Lightsail 实例名称</label>
+                            <input type="text" class="form-control" id="aws_instance_name" name="aws_instance_name" value="{{ .Settings.AWSInstanceName }}">
                         </div>
                         <div class="mb-3">
                             <label for="aws_ports" class="form-label">管理端口 (多个用逗号分隔)</label>
                             <input type="text" class="form-control" id="aws_ports" name="aws_ports" value="{{ if .Settings.AWSPorts }}{{ .Settings.AWSPorts }}{{ else }}{{ .Settings.SSHPort }}{{ end }}" placeholder="22,8080">
+                        </div>
+                    </div>
+
+                    <div class="border rounded p-3 mb-3" id="aws_ec2_section">
+                        <h6 class="mb-3">AWS EC2 配置</h6>
+                        <div class="mb-3">
+                            <label for="aws_ec2_security_group_id" class="form-label">EC2 安全组 ID</label>
+                            <input type="text" class="form-control" id="aws_ec2_security_group_id" name="aws_ec2_security_group_id" value="{{ .Settings.AWSEC2SecurityGroupID }}">
+                        </div>
+                        <div class="mb-3">
+                            <label for="aws_ec2_ports" class="form-label">管理端口 (多个用逗号分隔)</label>
+                            <input type="text" class="form-control" id="aws_ec2_ports" name="aws_ec2_ports" value="{{ if .Settings.AWSEC2Ports }}{{ .Settings.AWSEC2Ports }}{{ else }}{{ .Settings.SSHPort }}{{ end }}" placeholder="22,8080">
                         </div>
                     </div>
 
@@ -116,8 +136,11 @@
     const intervalSecondsInput = document.getElementById('check_interval_seconds');
     const providerVolcengineCheckbox = document.getElementById('provider_volcengine');
     const providerAWSCheckbox = document.getElementById('provider_aws');
+    const providerAWSEC2Checkbox = document.getElementById('provider_aws_ec2');
     const volcengineSection = document.getElementById('volcengine_section');
-    const awsSection = document.getElementById('aws_section');
+    const awsCommonSection = document.getElementById('aws_common_section');
+    const awsLightsailSection = document.getElementById('aws_lightsail_section');
+    const awsEC2Section = document.getElementById('aws_ec2_section');
     const volcengineRequiredFields = [
         document.getElementById('volcengine_access_key'),
         document.getElementById('volcengine_secret_key'),
@@ -125,12 +148,18 @@
         document.getElementById('volcengine_security_group_id'),
         document.getElementById('volcengine_ports')
     ];
-    const awsRequiredFields = [
+    const awsCommonRequiredFields = [
         document.getElementById('aws_access_key'),
         document.getElementById('aws_secret_key'),
-        document.getElementById('aws_region'),
+        document.getElementById('aws_region')
+    ];
+    const awsLightsailRequiredFields = [
         document.getElementById('aws_instance_name'),
         document.getElementById('aws_ports')
+    ];
+    const awsEC2RequiredFields = [
+        document.getElementById('aws_ec2_security_group_id'),
+        document.getElementById('aws_ec2_ports')
     ];
 
     function updateIntervalSeconds() {
@@ -158,19 +187,26 @@
 
     function updateProviderSections() {
         const volcEnabled = providerVolcengineCheckbox.checked;
-        const awsEnabled = providerAWSCheckbox.checked;
+        const awsLightsailEnabled = providerAWSCheckbox.checked;
+        const awsEC2Enabled = providerAWSEC2Checkbox.checked;
+        const awsCommonEnabled = awsLightsailEnabled || awsEC2Enabled;
 
         volcengineSection.style.display = volcEnabled ? '' : 'none';
-        awsSection.style.display = awsEnabled ? '' : 'none';
+        awsCommonSection.style.display = awsCommonEnabled ? '' : 'none';
+        awsLightsailSection.style.display = awsLightsailEnabled ? '' : 'none';
+        awsEC2Section.style.display = awsEC2Enabled ? '' : 'none';
 
         setFieldsRequired(volcengineRequiredFields, volcEnabled);
-        setFieldsRequired(awsRequiredFields, awsEnabled);
+        setFieldsRequired(awsCommonRequiredFields, awsCommonEnabled);
+        setFieldsRequired(awsLightsailRequiredFields, awsLightsailEnabled);
+        setFieldsRequired(awsEC2RequiredFields, awsEC2Enabled);
     }
 
     intervalValueInput.addEventListener('input', updateIntervalSeconds);
     intervalUnitSelect.addEventListener('change', updateIntervalSeconds);
     providerVolcengineCheckbox.addEventListener('change', updateProviderSections);
     providerAWSCheckbox.addEventListener('change', updateProviderSections);
+    providerAWSEC2Checkbox.addEventListener('change', updateProviderSections);
 
     // Initial update on page load
     updateIntervalSeconds();

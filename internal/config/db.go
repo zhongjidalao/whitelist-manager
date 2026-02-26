@@ -56,6 +56,10 @@ func InitDB() {
 				settings.AWSPorts = settings.SSHPort
 				changed = true
 			}
+			if strings.TrimSpace(settings.AWSEC2Ports) == "" {
+				settings.AWSEC2Ports = settings.SSHPort
+				changed = true
+			}
 
 			// Migrate legacy AWS single-provider settings to dedicated AWS fields.
 			if strings.EqualFold(strings.TrimSpace(settings.Provider), "aws") {

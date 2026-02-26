@@ -12,7 +12,8 @@
                 <p><strong>供应商:</strong> <span id="providers">{{ if .Settings.Providers }}{{ .Settings.Providers }}{{ else if .Settings.Provider }}{{ .Settings.Provider }}{{ else }}volcengine{{ end }}</span></p>
                 <p><strong>检测间隔:</strong> <span id="checkInterval">{{ .Settings.CheckInterval }}</span> 秒</p>
                 <p><strong>Volcengine 端口:</strong> <span id="volcenginePorts">{{ if .Settings.VolcenginePorts }}{{ .Settings.VolcenginePorts }}{{ else }}{{ .Settings.SSHPort }}{{ end }}</span></p>
-                <p><strong>AWS 端口:</strong> <span id="awsPorts">{{ if .Settings.AWSPorts }}{{ .Settings.AWSPorts }}{{ else }}{{ .Settings.SSHPort }}{{ end }}</span></p>
+                <p><strong>AWS Lightsail 端口:</strong> <span id="awsPorts">{{ if .Settings.AWSPorts }}{{ .Settings.AWSPorts }}{{ else }}{{ .Settings.SSHPort }}{{ end }}</span></p>
+                <p><strong>AWS EC2 端口:</strong> <span id="awsEC2Ports">{{ if .Settings.AWSEC2Ports }}{{ .Settings.AWSEC2Ports }}{{ else }}{{ .Settings.SSHPort }}{{ end }}</span></p>
                 <hr>
                 <form action="/run_now" method="post">
                     <button type="submit" class="btn btn-primary w-100">
@@ -57,6 +58,7 @@
     const checkIntervalEl = document.getElementById('checkInterval');
     const volcenginePortsEl = document.getElementById('volcenginePorts');
     const awsPortsEl = document.getElementById('awsPorts');
+    const awsEC2PortsEl = document.getElementById('awsEC2Ports');
 
     function updateDashboard() {
         // Fetch Status
@@ -68,6 +70,7 @@
                 checkIntervalEl.textContent = data.CheckInterval;
                 volcenginePortsEl.textContent = data.VolcenginePorts || data.SSHPort || '';
                 awsPortsEl.textContent = data.AWSPorts || data.SSHPort || '';
+                awsEC2PortsEl.textContent = data.AWSEC2Ports || data.SSHPort || '';
             })
             .catch(err => console.error('Error fetching status:', err));
 

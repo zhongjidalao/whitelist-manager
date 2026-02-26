@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**自动更新 Volcengine / AWS Lightsail 白名单访问规则的智能工具**
+**自动更新 Volcengine / AWS Lightsail / AWS EC2 白名单访问规则的智能工具**
 
 [![Go Version](https://img.shields.io/badge/Go-1.20+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -23,13 +23,13 @@ Whitelist Manager 是一个基于 Go 语言开发的自动化工具,用于实时
 - **安全加固**: 限制服务访问来源,防止暴力破解和未授权访问
 - **远程办公**: 自动适应不同网络环境,无需手动修改安全组规则
 - **多端口管理**: 同时管理多个服务端口的白名单访问控制
-- **多云支持**: 统一管理 Volcengine 安全组与 AWS Lightsail 端口规则
+- **多云支持**: 统一管理 Volcengine 安全组、AWS Lightsail 与 AWS EC2 规则
 
 ### ✨ 核心特性
 
 - 🔄 **自动监控**: 定时检查公网 IP 变化(默认 15 分钟,可自定义)
 - 🔐 **白名单自动更新**: 实时同步 IP 变化到云防火墙规则
-- ☁️ **多供应商支持**: 支持 Volcengine 与 AWS Lightsail
+- ☁️ **多供应商支持**: 支持 Volcengine、AWS Lightsail、AWS EC2
 - 🌐 **Web 管理界面**: 提供可视化配置面板和日志监控
 - 🚀 **多端口支持**: 一次配置多个端口(如 22,8080,3389),逗号分隔
 - 📊 **完整日志记录**: 所有操作可追溯,支持分页查看和清空
@@ -121,7 +121,7 @@ go run cmd/server/main.go
 
    | 配置项 | 说明 | 示例 |
    |--------|------|------|
-   | Providers | 云供应商(可多选) | `volcengine` + `aws` |
+   | Providers | 云供应商(可多选) | `volcengine` + `aws` + `aws-ec2` |
    | Volcengine Access Key | Volcengine 访问密钥 | `AKLT...` |
    | Volcengine Secret Key | Volcengine 私钥 | *** |
    | Volcengine Region | Volcengine 区域 | `cn-beijing` |
@@ -132,6 +132,8 @@ go run cmd/server/main.go
    | AWS Region | Lightsail 区域 | `ap-northeast-1` |
    | AWS Instance Name | Lightsail 实例名称 | `my-lightsail-instance` |
    | AWS Ports | AWS 管理端口(逗号分隔) | `22,80,443` |
+   | AWS EC2 Security Group ID | EC2 安全组 ID | `sg-abcdef123456` |
+   | AWS EC2 Ports | AWS EC2 管理端口(逗号分隔) | `22,443` |
    | Check Interval | 检查间隔 | `15` (分钟) |
    | IP Services | IP 查询服务列表 | 默认已配置多个备用源 |
 
@@ -187,7 +189,8 @@ POST /logs/clear
 
 ```
 Volcengine Ports: 22,3389
-AWS Ports: 22,80,443
+AWS Lightsail Ports: 22,80,443
+AWS EC2 Ports: 22,443
 ```
 
 程序会按供应商分别处理端口白名单，互不影响。
@@ -269,6 +272,12 @@ A: 当前 AK/SK + Region 下找不到该实例。请检查:
 - `AWS Region` 是否与实例所在区域一致
 - `AWS Instance Name` 是否精确匹配(区分大小写)
 - AK/SK 是否属于正确账号
+
+**Q: AWS EC2 规则更新失败?**
+A: 请检查:
+- `AWS EC2 Security Group ID` 是否正确
+- AK/SK 是否有 EC2 安全组读写权限
+- `AWS Region` 是否与安全组所在区域一致
 
 **Q: Volcengine 提示 `SignatureDoesNotMatch`?**
 A: 表示签名校验失败。请检查:

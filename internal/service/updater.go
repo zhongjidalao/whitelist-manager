@@ -16,6 +16,7 @@ import (
 	awsSDK "github.com/aws/aws-sdk-go/aws"
 	awsCredentials "github.com/aws/aws-sdk-go/aws/credentials"
 	awsSession "github.com/aws/aws-sdk-go/aws/session"
+	awsec2 "github.com/aws/aws-sdk-go/service/ec2"
 	awslightsail "github.com/aws/aws-sdk-go/service/lightsail"
 	"github.com/volcengine/volcengine-go-sdk/service/vpc"
 	"github.com/volcengine/volcengine-go-sdk/volcengine"
@@ -26,6 +27,7 @@ import (
 const (
 	providerVolcengine = "volcengine"
 	providerAWS        = "aws"
+	providerAWSEC2     = "aws-ec2"
 )
 
 // CheckAndUpdate is the main entry point for the scheduled task
@@ -65,6 +67,8 @@ func CheckAndUpdate() {
 		switch provider {
 		case providerAWS:
 			updateAWSLightsailFirewall(settings, currentIP, ports)
+		case providerAWSEC2:
+			updateAWSEC2SecurityGroup(settings, currentIP, ports)
 		default:
 			updateVolcengineSecurityGroup(settings, currentIP, ports)
 		}
@@ -103,6 +107,8 @@ func normalizeProvider(provider string) (string, bool) {
 		return providerVolcengine, true
 	case providerAWS:
 		return providerAWS, true
+	case providerAWSEC2:
+		return providerAWSEC2, true
 	default:
 		return "", false
 	}
@@ -123,6 +129,19 @@ func validateSettings(settings *models.Settings, provider string) error {
 		}
 		if strings.TrimSpace(settings.AWSInstanceName) == "" {
 			missing = append(missing, "AWS_InstanceName")
+		}
+	case providerAWSEC2:
+		if strings.TrimSpace(settings.AWSAccessKey) == "" {
+			missing = append(missing, "AWS_AK")
+		}
+		if strings.TrimSpace(settings.AWSSecretKey) == "" {
+			missing = append(missing, "AWS_SK")
+		}
+		if strings.TrimSpace(settings.AWSRegion) == "" {
+			missing = append(missing, "AWS_Region")
+		}
+		if strings.TrimSpace(settings.AWSEC2SecurityGroupID) == "" {
+			missing = append(missing, "AWS_EC2_SG_ID")
 		}
 	default:
 		if strings.TrimSpace(settings.AccessKey) == "" {
@@ -233,6 +252,10 @@ func getPortsByProvider(settings *models.Settings, provider string) string {
 	switch provider {
 	case providerAWS:
 		if ports := strings.TrimSpace(settings.AWSPorts); ports != "" {
+			return ports
+		}
+	case providerAWSEC2:
+		if ports := strings.TrimSpace(settings.AWSEC2Ports); ports != "" {
 			return ports
 		}
 	default:
@@ -416,6 +439,142 @@ func updateAWSLightsailFirewall(settings *models.Settings, currentIP string, por
 			config.Log("INFO", fmt.Sprintf("✓ provider=aws 端口 %d: 已更新允许 %s", targetPort, newCidr))
 		}
 	}
+}
+
+func updateAWSEC2SecurityGroup(settings *models.Settings, currentIP string, ports []int) {
+	region := strings.TrimSpace(settings.AWSRegion)
+	normalizedRegion, regionChanged := normalizeAWSRegion(region)
+	if regionChanged {
+		config.Log("WARNING", fmt.Sprintf("provider=aws-ec2: 区域使用了可用区格式 (%s)，已自动纠正为 %s", region, normalizedRegion))
+	}
+
+	sess, err := awsSession.NewSession(&awsSDK.Config{
+		Region:      awsSDK.String(normalizedRegion),
+		Credentials: awsCredentials.NewStaticCredentials(settings.AWSAccessKey, settings.AWSSecretKey, ""),
+	})
+	if err != nil {
+		config.Log("ERROR", fmt.Sprintf("provider=aws-ec2: 创建AWS会话失败: %v", err))
+		return
+	}
+
+	client := awsec2.New(sess)
+	securityGroupID := strings.TrimSpace(settings.AWSEC2SecurityGroupID)
+
+	rulesOutput, err := client.DescribeSecurityGroupRules(&awsec2.DescribeSecurityGroupRulesInput{
+		Filters: []*awsec2.Filter{
+			{
+				Name:   awsSDK.String("group-id"),
+				Values: []*string{awsSDK.String(securityGroupID)},
+			},
+		},
+	})
+	if err != nil {
+		config.Log("ERROR", fmt.Sprintf("provider=aws-ec2: 获取安全组规则失败: %v", err))
+		return
+	}
+
+	newCidr := fmt.Sprintf("%s/32", currentIP)
+	for _, targetPort := range ports {
+		matchedRules := findManagedAWSEC2Rules(rulesOutput.SecurityGroupRules, targetPort)
+		if isAWSEC2PortSynced(matchedRules, targetPort, newCidr) {
+			config.Log("INFO", fmt.Sprintf("provider=aws-ec2 端口 %d: IP未变 (%s)，无需更新", targetPort, currentIP))
+			continue
+		}
+
+		ruleIDs := make([]*string, 0, len(matchedRules))
+		for _, rule := range matchedRules {
+			if rule.SecurityGroupRuleId == nil {
+				continue
+			}
+			ruleIDs = append(ruleIDs, rule.SecurityGroupRuleId)
+		}
+
+		if len(ruleIDs) > 0 {
+			config.Log("INFO", fmt.Sprintf("provider=aws-ec2 端口 %d: 撤销旧规则 %d 条", targetPort, len(ruleIDs)))
+			_, err = client.RevokeSecurityGroupIngress(&awsec2.RevokeSecurityGroupIngressInput{
+				GroupId:              awsSDK.String(securityGroupID),
+				SecurityGroupRuleIds: ruleIDs,
+			})
+			if err != nil {
+				config.Log("WARNING", fmt.Sprintf("provider=aws-ec2 端口 %d: 撤销旧规则失败: %v", targetPort, err))
+			}
+		} else {
+			config.Log("INFO", fmt.Sprintf("provider=aws-ec2 端口 %d: 未找到现有规则，将添加新规则", targetPort))
+		}
+
+		config.Log("INFO", fmt.Sprintf("provider=aws-ec2 端口 %d: 添加新规则 %s", targetPort, newCidr))
+		_, err = client.AuthorizeSecurityGroupIngress(&awsec2.AuthorizeSecurityGroupIngressInput{
+			GroupId: awsSDK.String(securityGroupID),
+			IpPermissions: []*awsec2.IpPermission{
+				{
+					IpProtocol: awsSDK.String("tcp"),
+					FromPort:   awsSDK.Int64(int64(targetPort)),
+					ToPort:     awsSDK.Int64(int64(targetPort)),
+					IpRanges: []*awsec2.IpRange{
+						{
+							CidrIp:      awsSDK.String(newCidr),
+							Description: awsSDK.String(fmt.Sprintf("白名单访问(端口%d) - Go脚本自动更新", targetPort)),
+						},
+					},
+				},
+			},
+		})
+		if err != nil {
+			config.Log("ERROR", fmt.Sprintf("provider=aws-ec2 端口 %d: 授权失败: %v", targetPort, err))
+		} else {
+			config.Log("INFO", fmt.Sprintf("✓ provider=aws-ec2 端口 %d: 已更新允许 %s", targetPort, newCidr))
+		}
+	}
+}
+
+func findManagedAWSEC2Rules(rules []*awsec2.SecurityGroupRule, targetPort int) []*awsec2.SecurityGroupRule {
+	matched := make([]*awsec2.SecurityGroupRule, 0, 4)
+	for _, rule := range rules {
+		if rule == nil || awsSDK.BoolValue(rule.IsEgress) {
+			continue
+		}
+
+		protocol := strings.ToLower(awsSDK.StringValue(rule.IpProtocol))
+		if protocol != "tcp" && protocol != "-1" {
+			continue
+		}
+
+		fromPort := int(awsSDK.Int64Value(rule.FromPort))
+		toPort := int(awsSDK.Int64Value(rule.ToPort))
+		if protocol == "-1" {
+			// all protocol rule should be considered matched
+			matched = append(matched, rule)
+			continue
+		}
+
+		if targetPort < fromPort || targetPort > toPort {
+			continue
+		}
+
+		matched = append(matched, rule)
+	}
+	return matched
+}
+
+func isAWSEC2PortSynced(rules []*awsec2.SecurityGroupRule, targetPort int, targetCidr string) bool {
+	if len(rules) != 1 {
+		return false
+	}
+
+	rule := rules[0]
+	if strings.ToLower(awsSDK.StringValue(rule.IpProtocol)) != "tcp" {
+		return false
+	}
+	if int(awsSDK.Int64Value(rule.FromPort)) != targetPort || int(awsSDK.Int64Value(rule.ToPort)) != targetPort {
+		return false
+	}
+	if !strings.EqualFold(awsSDK.StringValue(rule.CidrIpv4), targetCidr) {
+		return false
+	}
+	if awsSDK.BoolValue(rule.IsEgress) {
+		return false
+	}
+	return true
 }
 
 func normalizeAWSRegion(region string) (string, bool) {

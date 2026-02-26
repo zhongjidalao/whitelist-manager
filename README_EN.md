@@ -91,16 +91,16 @@ whitelist-manager/
 ```bash
 # 1. Clone repository
 git clone <repository-url>
-cd volcengine-whitelist-manager
+cd whitelist-manager
 
 # 2. Install dependencies
 go mod tidy
 
 # 3. Build binary
-go build -o volcengine-whitelist-manager cmd/server/main.go
+go build -o whitelist-manager cmd/server/main.go
 
 # 4. Run program
-./volcengine-whitelist-manager
+./whitelist-manager
 ```
 
 #### Method 2: Run Directly (Development Mode)
@@ -121,12 +121,17 @@ go run cmd/server/main.go
 
    | Configuration | Description | Example |
    |--------------|-------------|---------|
-   | Provider | Cloud provider | `volcengine` / `aws` |
-   | Access Key | Cloud API access key | `AKLT...` / `AKIA...` |
-   | Secret Key | Cloud API secret key | *** |
-   | Region | Resource region | `cn-beijing`, `ap-southeast-1` |
-   | Security Group ID | Volcengine: security group ID; AWS: Lightsail instance name | `sg-xxxxxx` / `my-lightsail-instance` |
-   | Ports | Ports to manage | `22` or `22,8080,3389` |
+   | Providers | Cloud providers (multi-select) | `volcengine` + `aws` |
+   | Volcengine Access Key | Volcengine API access key | `AKLT...` |
+   | Volcengine Secret Key | Volcengine API secret key | *** |
+   | Volcengine Region | Volcengine region | `cn-beijing` |
+   | Volcengine Security Group ID | Volcengine security group ID | `sg-xxxxxx` |
+   | Volcengine Ports | Volcengine managed ports (comma-separated) | `22,3389` |
+   | AWS Access Key | AWS API access key | `AKIA...` |
+   | AWS Secret Key | AWS API secret key | *** |
+   | AWS Region | Lightsail region | `ap-northeast-1` |
+   | AWS Instance Name | Lightsail instance name | `my-lightsail-instance` |
+   | AWS Ports | AWS managed ports (comma-separated) | `22,80,443` |
    | Check Interval | Check interval | `15` (minutes) |
    | IP Services | IP query service list | Multiple backup sources pre-configured |
 
@@ -146,8 +151,9 @@ go run cmd/server/main.go
 - Provide "Run Now" button
 
 #### Settings Page (`/settings`)
-- Select provider and configure credentials
-- Set check interval and ports
+- Multi-select one or more cloud providers
+- Configure Volcengine and AWS credentials/resources separately
+- Configure provider-specific port lists and check interval
 - Manage IP query service list
 
 #### Logs Page (`/logs`)
@@ -175,15 +181,16 @@ POST /logs/clear
 
 ## ⚙️ Advanced Configuration
 
-### Multi-Port Configuration
+### Multi-Provider Port Configuration
 
-Use comma-separated values in the "Ports" field:
+You can enable multiple providers at the same time and define separate ports:
 
 ```
-22,8080,3389,5000
+Volcengine Ports: 22,3389
+AWS Ports: 22,80,443
 ```
 
-The program will create independent security group rules for each port.
+The program applies whitelist rules independently for each provider.
 
 ### Custom IP Query Services
 
@@ -200,6 +207,11 @@ You can add custom services in the "IP Services" field on the settings page, one
 - Minimum: 60 seconds
 - Recommended: 900 seconds (15 minutes)
 - Unit support: seconds / minutes / hours
+
+### Log Retention Policy
+
+- Automatically removes logs older than 15 days before each scheduled/manual run
+- You can still clear all logs manually from the logs page
 
 ---
 
@@ -225,11 +237,11 @@ go fmt ./...
 
 ```bash
 # Build optimized version (reduce size)
-go build -ldflags="-s -w" -o volcengine-whitelist-manager cmd/server/main.go
+go build -ldflags="-s -w" -o whitelist-manager cmd/server/main.go
 
 # Cross-platform compilation
-GOOS=linux GOARCH=amd64 go build -o volcengine-whitelist-manager-linux cmd/server/main.go
-GOOS=windows GOARCH=amd64 go build -o volcengine-whitelist-manager.exe cmd/server/main.go
+GOOS=linux GOARCH=amd64 go build -o whitelist-manager-linux cmd/server/main.go
+GOOS=windows GOARCH=amd64 go build -o whitelist-manager.exe cmd/server/main.go
 ```
 
 ---
@@ -239,7 +251,9 @@ GOOS=windows GOARCH=amd64 go build -o volcengine-whitelist-manager.exe cmd/serve
 ### Common Issues
 
 **Q: Getting "Incomplete configuration" error?**
-A: Ensure Access Key, Secret Key, Region, and Security Group ID are all correctly filled in.
+A: Make sure at least one provider is selected, then verify required fields for each selected provider:
+- Volcengine: `Access Key` / `Secret Key` / `Region` / `Security Group ID` / `Volcengine Ports`
+- AWS: `AWS Access Key` / `AWS Secret Key` / `AWS Region` / `AWS Instance Name` / `AWS Ports`
 
 **Q: Cannot get public IP?**
 A: Check network connection or add more backup IP query services in settings.
@@ -249,6 +263,18 @@ A: Check the following:
 - Does the Access Key have security group modification permissions?
 - Is the Security Group ID correct?
 - Does the Region configuration match the security group's region?
+
+**Q: AWS returns `DoesNotExist` / `The Instance does not exist`?**
+A: The instance cannot be found under the current AK/SK + Region. Check:
+- Is `AWS Region` exactly where the instance is deployed?
+- Is `AWS Instance Name` exactly correct (case-sensitive)?
+- Does the AK/SK belong to the correct AWS account?
+
+**Q: Volcengine returns `SignatureDoesNotMatch`?**
+A: Signature verification failed. Check:
+- Volcengine AK/SK are correct (no leading/trailing spaces)
+- The AK/SK are still active and valid
+- Server system time is synchronized (NTP)
 
 **Q: Where is the database file?**
 A: Automatically created at `instance/config.db`, in the same directory as the executable.
@@ -269,7 +295,8 @@ A: Edit line 47 in `cmd/server/main.go`, change `:9877` to another port.
 ### Log Examples
 
 ```
-[INFO] Starting IP check...
+[INFO] Starting IP check (providers=volcengine,aws)...
+[INFO] Auto log cleanup completed: deleted 8 logs older than 15 days
 [INFO] Current public IP: 123.45.67.89 (source: https://myip.ipip.net)
 [INFO] Port 22: Revoking old rule 111.22.33.44/32
 [INFO] Port 22: Adding new rule 123.45.67.89/32

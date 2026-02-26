@@ -91,16 +91,16 @@ whitelist-manager/
 ```bash
 # 1. 克隆仓库
 git clone <repository-url>
-cd volcengine-whitelist-manager
+cd whitelist-manager
 
 # 2. 安装依赖
 go mod tidy
 
 # 3. 编译二进制文件
-go build -o volcengine-whitelist-manager cmd/server/main.go
+go build -o whitelist-manager cmd/server/main.go
 
 # 4. 运行程序
-./volcengine-whitelist-manager
+./whitelist-manager
 ```
 
 #### 方法二: 直接运行(开发模式)
@@ -121,12 +121,17 @@ go run cmd/server/main.go
 
    | 配置项 | 说明 | 示例 |
    |--------|------|------|
-   | Provider | 云供应商 | `volcengine` / `aws` |
-   | Access Key | 云 API 访问密钥 | `AKLT...` / `AKIA...` |
-   | Secret Key | 云 API 私钥 | *** |
-   | Region | 资源所在区域 | `cn-beijing`, `ap-southeast-1` |
-   | Security Group ID | Volcengine: 安全组 ID；AWS: Lightsail 实例名称 | `sg-xxxxxx` / `my-lightsail-instance` |
-   | Ports | 需要管理的端口 | `22` 或 `22,8080,3389` |
+   | Providers | 云供应商(可多选) | `volcengine` + `aws` |
+   | Volcengine Access Key | Volcengine 访问密钥 | `AKLT...` |
+   | Volcengine Secret Key | Volcengine 私钥 | *** |
+   | Volcengine Region | Volcengine 区域 | `cn-beijing` |
+   | Volcengine Security Group ID | Volcengine 安全组 ID | `sg-xxxxxx` |
+   | Volcengine Ports | Volcengine 管理端口(逗号分隔) | `22,3389` |
+   | AWS Access Key | AWS 访问密钥 | `AKIA...` |
+   | AWS Secret Key | AWS 私钥 | *** |
+   | AWS Region | Lightsail 区域 | `ap-northeast-1` |
+   | AWS Instance Name | Lightsail 实例名称 | `my-lightsail-instance` |
+   | AWS Ports | AWS 管理端口(逗号分隔) | `22,80,443` |
    | Check Interval | 检查间隔 | `15` (分钟) |
    | IP Services | IP 查询服务列表 | 默认已配置多个备用源 |
 
@@ -146,8 +151,9 @@ go run cmd/server/main.go
 - 提供 "立即运行" 按钮
 
 #### 设置页面 (`/settings`)
-- 选择云供应商并配置凭证
-- 设置检查间隔和端口
+- 复选选择一个或多个云供应商
+- 分别配置 Volcengine 与 AWS 的凭证和资源
+- 分别配置各供应商端口与检查间隔
 - 管理 IP 查询服务列表
 
 #### 日志页面 (`/logs`)
@@ -175,15 +181,16 @@ POST /logs/clear
 
 ## ⚙️ 高级配置
 
-### 多端口配置
+### 多供应商独立端口配置
 
-在 "Ports" 字段中使用逗号分隔多个端口:
+可同时启用多个供应商，并分别设置端口:
 
 ```
-22,8080,3389,5000
+Volcengine Ports: 22,3389
+AWS Ports: 22,80,443
 ```
 
-程序会为每个端口创建独立的安全组规则。
+程序会按供应商分别处理端口白名单，互不影响。
 
 ### 自定义 IP 查询服务
 
@@ -200,6 +207,11 @@ POST /logs/clear
 - 最小值: 60 秒
 - 推荐值: 900 秒(15 分钟)
 - 单位支持: 秒(seconds) / 分钟(minutes) / 小时(hours)
+
+### 日志保留策略
+
+- 每次任务执行前自动清理 15 天前日志
+- 可在日志页面手动清空所有日志
 
 ---
 
@@ -225,11 +237,11 @@ go fmt ./...
 
 ```bash
 # 编译优化版本(减小体积)
-go build -ldflags="-s -w" -o volcengine-whitelist-manager cmd/server/main.go
+go build -ldflags="-s -w" -o whitelist-manager cmd/server/main.go
 
 # 跨平台编译
-GOOS=linux GOARCH=amd64 go build -o volcengine-whitelist-manager-linux cmd/server/main.go
-GOOS=windows GOARCH=amd64 go build -o volcengine-whitelist-manager.exe cmd/server/main.go
+GOOS=linux GOARCH=amd64 go build -o whitelist-manager-linux cmd/server/main.go
+GOOS=windows GOARCH=amd64 go build -o whitelist-manager.exe cmd/server/main.go
 ```
 
 ---
@@ -239,7 +251,9 @@ GOOS=windows GOARCH=amd64 go build -o volcengine-whitelist-manager.exe cmd/serve
 ### 常见问题
 
 **Q: 提示 "配置不完整" 无法更新?**
-A: 确保 Access Key, Secret Key, Region, Security Group ID 都已正确填写。
+A: 先确认至少勾选了一个供应商，然后检查该供应商对应字段是否完整:
+- Volcengine: `Access Key` / `Secret Key` / `Region` / `Security Group ID` / `Volcengine Ports`
+- AWS: `AWS Access Key` / `AWS Secret Key` / `AWS Region` / `AWS Instance Name` / `AWS Ports`
 
 **Q: 无法获取公网 IP?**
 A: 检查网络连接,或在设置中添加更多备用 IP 查询服务。
@@ -249,6 +263,18 @@ A: 检查以下几点:
 - Access Key 是否有安全组修改权限
 - Security Group ID 是否正确
 - Region 配置是否与安全组所在区域一致
+
+**Q: AWS 提示 `DoesNotExist` / `The Instance does not exist`?**
+A: 当前 AK/SK + Region 下找不到该实例。请检查:
+- `AWS Region` 是否与实例所在区域一致
+- `AWS Instance Name` 是否精确匹配(区分大小写)
+- AK/SK 是否属于正确账号
+
+**Q: Volcengine 提示 `SignatureDoesNotMatch`?**
+A: 表示签名校验失败。请检查:
+- Volcengine AK/SK 是否填写正确(无前后空格)
+- AK/SK 是否已禁用或无效
+- 服务器系统时间是否准确(NTP)
 
 **Q: 数据库文件在哪里?**
 A: 自动创建在 `instance/config.db`,与可执行文件同级目录。
@@ -269,7 +295,8 @@ A: 编辑 `cmd/server/main.go` 第 47 行,修改 `:9877` 为其他端口。
 ### 日志示例
 
 ```
-[INFO] 开始IP检查...
+[INFO] 开始IP检查 (providers=volcengine,aws)...
+[INFO] 日志自动清理完成: 已删除 8 条 15 天前日志
 [INFO] 当前公网IP: 123.45.67.89 (来源: https://myip.ipip.net)
 [INFO] 端口 22: 撤销旧规则 111.22.33.44/32
 [INFO] 端口 22: 添加新规则 123.45.67.89/32

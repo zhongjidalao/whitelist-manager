@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"volcengine-whitelist-manager/internal/config"
 	"volcengine-whitelist-manager/internal/models"
 	"volcengine-whitelist-manager/internal/service"
@@ -36,6 +37,14 @@ func (h *Handler) ClearLogs(c *gin.Context) {
 
 func (h *Handler) GetStatusJSON(c *gin.Context) {
 	settings := config.GetSettings()
+	providers := strings.TrimSpace(settings.Providers)
+	if providers == "" {
+		providers = strings.TrimSpace(settings.Provider)
+	}
+	if providers == "" {
+		providers = "volcengine"
+	}
+
 	var nextRun string
 	if h.JobID != 0 {
 		entry := h.Cron.Entry(h.JobID)
@@ -49,9 +58,13 @@ func (h *Handler) GetStatusJSON(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"NextRun":       nextRun,
-		"CheckInterval": settings.CheckInterval,
-		"SSHPort":       settings.SSHPort,
+		"NextRun":         nextRun,
+		"CheckInterval":   settings.CheckInterval,
+		"SSHPort":         settings.SSHPort,
+		"VolcenginePorts": firstNonEmpty(settings.VolcenginePorts, settings.SSHPort),
+		"AWSPorts":        firstNonEmpty(settings.AWSPorts, settings.SSHPort),
+		"Provider":        settings.Provider,
+		"Providers":       providers,
 	})
 }
 
@@ -77,7 +90,7 @@ func (h *Handler) Index(c *gin.Context) {
 	} else {
 		nextRun = "Not Scheduled"
 	}
-	
+
 	flash := c.Query("flash")
 
 	c.HTML(http.StatusOK, "index.html", gin.H{
@@ -90,35 +103,55 @@ func (h *Handler) Index(c *gin.Context) {
 
 func (h *Handler) SettingsPage(c *gin.Context) {
 	settings := config.GetSettings()
-    
-    // Convert CheckInterval (seconds) to human-readable form
-    intervalValue := settings.CheckInterval
-    intervalUnit := "seconds" // Default unit
+	if strings.TrimSpace(settings.Provider) == "" {
+		settings.Provider = "volcengine"
+	}
+	if strings.TrimSpace(settings.Providers) == "" {
+		settings.Providers = settings.Provider
+	}
+	if strings.TrimSpace(settings.VolcenginePorts) == "" {
+		settings.VolcenginePorts = settings.SSHPort
+	}
+	if strings.TrimSpace(settings.AWSPorts) == "" {
+		settings.AWSPorts = settings.SSHPort
+	}
 
-    if intervalValue >= 3600 && intervalValue%3600 == 0 { // Check for full hours
-        intervalValue /= 3600
-        intervalUnit = "hours"
-    } else if intervalValue >= 60 && intervalValue%60 == 0 { // Check for full minutes
-        intervalValue /= 60
-        intervalUnit = "minutes"
-    }
+	// Convert CheckInterval (seconds) to human-readable form
+	intervalValue := settings.CheckInterval
+	intervalUnit := "seconds" // Default unit
+
+	if intervalValue >= 3600 && intervalValue%3600 == 0 { // Check for full hours
+		intervalValue /= 3600
+		intervalUnit = "hours"
+	} else if intervalValue >= 60 && intervalValue%60 == 0 { // Check for full minutes
+		intervalValue /= 60
+		intervalUnit = "minutes"
+	}
 
 	c.HTML(http.StatusOK, "settings.html", gin.H{
-		"Settings": settings,
-        "CheckIntervalValue": intervalValue,
-        "CheckIntervalUnit": intervalUnit,
+		"Settings":           settings,
+		"CheckIntervalValue": intervalValue,
+		"CheckIntervalUnit":  intervalUnit,
+		"VolcEnabled":        hasProvider(settings.Providers, "volcengine"),
+		"AWSEnabled":         hasProvider(settings.Providers, "aws"),
 	})
 }
 
 func (h *Handler) SaveSettings(c *gin.Context) {
 	var form struct {
-		AccessKey       string `form:"access_key"`
-		SecretKey       string `form:"secret_key"`
-		Region          string `form:"region"`
-		SecurityGroupID string `form:"security_group_id"`
-		SSHPort         string `form:"ssh_port"`
-		CheckInterval   int    `form:"check_interval"`
-		IPServices      string `form:"ip_services"`
+		Providers               []string `form:"providers"`
+		VolcengineAccessKey     string   `form:"volcengine_access_key"`
+		VolcengineSecretKey     string   `form:"volcengine_secret_key"`
+		VolcengineRegion        string   `form:"volcengine_region"`
+		VolcengineSecurityGroup string   `form:"volcengine_security_group_id"`
+		AWSAccessKey            string   `form:"aws_access_key"`
+		AWSSecretKey            string   `form:"aws_secret_key"`
+		AWSRegion               string   `form:"aws_region"`
+		AWSInstanceName         string   `form:"aws_instance_name"`
+		VolcenginePorts         string   `form:"volcengine_ports"`
+		AWSPorts                string   `form:"aws_ports"`
+		CheckInterval           int      `form:"check_interval"`
+		IPServices              string   `form:"ip_services"`
 	}
 
 	if err := c.ShouldBind(&form); err != nil {
@@ -127,11 +160,28 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 	}
 
 	settings := config.GetSettings()
-	settings.AccessKey = form.AccessKey
-	settings.SecretKey = form.SecretKey
-	settings.Region = form.Region
-	settings.SecurityGroupID = form.SecurityGroupID
-	settings.SSHPort = form.SSHPort
+	providers := normalizeProvidersFromForm(form.Providers)
+	settings.Providers = providers
+	switch providers {
+	case "aws":
+		settings.Provider = "aws"
+	case "":
+		settings.Provider = ""
+	default:
+		settings.Provider = "volcengine"
+	}
+
+	settings.AccessKey = form.VolcengineAccessKey
+	settings.SecretKey = form.VolcengineSecretKey
+	settings.Region = form.VolcengineRegion
+	settings.SecurityGroupID = form.VolcengineSecurityGroup
+	settings.AWSAccessKey = form.AWSAccessKey
+	settings.AWSSecretKey = form.AWSSecretKey
+	settings.AWSRegion = form.AWSRegion
+	settings.AWSInstanceName = form.AWSInstanceName
+	settings.VolcenginePorts = form.VolcenginePorts
+	settings.AWSPorts = form.AWSPorts
+	settings.SSHPort = firstNonEmpty(form.VolcenginePorts, form.AWSPorts)
 	settings.CheckInterval = form.CheckInterval
 	settings.IPServices = form.IPServices
 
@@ -146,6 +196,44 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 	h.JobID = id
 
 	c.Redirect(http.StatusFound, "/?flash=设置已保存")
+}
+
+func normalizeProvidersFromForm(rawProviders []string) string {
+	seen := make(map[string]struct{}, len(rawProviders))
+	for _, provider := range rawProviders {
+		provider = strings.ToLower(strings.TrimSpace(provider))
+		if provider != "volcengine" && provider != "aws" {
+			continue
+		}
+		seen[provider] = struct{}{}
+	}
+
+	ordered := make([]string, 0, 2)
+	if _, ok := seen["volcengine"]; ok {
+		ordered = append(ordered, "volcengine")
+	}
+	if _, ok := seen["aws"]; ok {
+		ordered = append(ordered, "aws")
+	}
+	return strings.Join(ordered, ",")
+}
+
+func hasProvider(providersCSV, target string) bool {
+	for _, provider := range strings.Split(providersCSV, ",") {
+		if strings.EqualFold(strings.TrimSpace(provider), target) {
+			return true
+		}
+	}
+	return false
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (h *Handler) RunNow(c *gin.Context) {

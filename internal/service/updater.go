@@ -13,21 +13,37 @@ import (
 	"volcengine-whitelist-manager/internal/config"
 	"volcengine-whitelist-manager/internal/models"
 
+	awsSDK "github.com/aws/aws-sdk-go/aws"
+	awsCredentials "github.com/aws/aws-sdk-go/aws/credentials"
+	awsSession "github.com/aws/aws-sdk-go/aws/session"
+	awslightsail "github.com/aws/aws-sdk-go/service/lightsail"
 	"github.com/volcengine/volcengine-go-sdk/service/vpc"
 	"github.com/volcengine/volcengine-go-sdk/volcengine"
-	"github.com/volcengine/volcengine-go-sdk/volcengine/credentials"
-	"github.com/volcengine/volcengine-go-sdk/volcengine/session"
+	volcCredentials "github.com/volcengine/volcengine-go-sdk/volcengine/credentials"
+	volcSession "github.com/volcengine/volcengine-go-sdk/volcengine/session"
+)
+
+const (
+	providerVolcengine = "volcengine"
+	providerAWS        = "aws"
 )
 
 // CheckAndUpdate is the main entry point for the scheduled task
 func CheckAndUpdate() {
+	if deletedCount, err := config.CleanupOldLogs(15); err != nil {
+		config.Log("WARNING", fmt.Sprintf("日志自动清理失败: %v", err))
+	} else if deletedCount > 0 {
+		config.Log("INFO", fmt.Sprintf("日志自动清理完成: 已删除 %d 条 15 天前日志", deletedCount))
+	}
+
 	settings := config.GetSettings()
-	if settings.AccessKey == "" || settings.SecretKey == "" || settings.SecurityGroupID == "" {
-		config.Log("WARNING", "任务跳过: 配置不完整 (AK/SK/SG_ID 缺失)")
+	providers := normalizeProviders(settings.Providers, settings.Provider)
+	if len(providers) == 0 {
+		config.Log("WARNING", "任务跳过: 未选择任何云供应商")
 		return
 	}
 
-	config.Log("INFO", "开始IP检查...")
+	config.Log("INFO", fmt.Sprintf("开始IP检查 (providers=%s)...", strings.Join(providers, ",")))
 
 	currentIP := getCurrentIP(settings.IPServices)
 	if currentIP == "" {
@@ -35,7 +51,99 @@ func CheckAndUpdate() {
 		return
 	}
 
-	updateSecurityGroup(settings, currentIP)
+	for _, provider := range providers {
+		if err := validateSettings(settings, provider); err != nil {
+			config.Log("WARNING", err.Error())
+			continue
+		}
+		ports := parsePorts(getPortsByProvider(settings, provider))
+		if len(ports) == 0 {
+			config.Log("WARNING", fmt.Sprintf("provider=%s 跳过: 未配置有效端口 (请使用逗号分隔，例如: 22,8080)", provider))
+			continue
+		}
+
+		switch provider {
+		case providerAWS:
+			updateAWSLightsailFirewall(settings, currentIP, ports)
+		default:
+			updateVolcengineSecurityGroup(settings, currentIP, ports)
+		}
+	}
+}
+
+func normalizeProviders(providersStr, legacyProvider string) []string {
+	raw := strings.TrimSpace(providersStr)
+	if raw == "" {
+		raw = strings.TrimSpace(legacyProvider)
+	}
+	if raw == "" {
+		raw = providerVolcengine
+	}
+
+	providers := make([]string, 0, 2)
+	seen := make(map[string]struct{}, 2)
+	for _, item := range strings.Split(raw, ",") {
+		provider, ok := normalizeProvider(item)
+		if !ok {
+			continue
+		}
+		if _, exists := seen[provider]; exists {
+			continue
+		}
+		seen[provider] = struct{}{}
+		providers = append(providers, provider)
+	}
+
+	return providers
+}
+
+func normalizeProvider(provider string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case providerVolcengine:
+		return providerVolcengine, true
+	case providerAWS:
+		return providerAWS, true
+	default:
+		return "", false
+	}
+}
+
+func validateSettings(settings *models.Settings, provider string) error {
+	var missing []string
+	switch provider {
+	case providerAWS:
+		if strings.TrimSpace(settings.AWSAccessKey) == "" {
+			missing = append(missing, "AWS_AK")
+		}
+		if strings.TrimSpace(settings.AWSSecretKey) == "" {
+			missing = append(missing, "AWS_SK")
+		}
+		if strings.TrimSpace(settings.AWSRegion) == "" {
+			missing = append(missing, "AWS_Region")
+		}
+		if strings.TrimSpace(settings.AWSInstanceName) == "" {
+			missing = append(missing, "AWS_InstanceName")
+		}
+	default:
+		if strings.TrimSpace(settings.AccessKey) == "" {
+			missing = append(missing, "Volc_AK")
+		}
+		if strings.TrimSpace(settings.SecretKey) == "" {
+			missing = append(missing, "Volc_SK")
+		}
+		if strings.TrimSpace(settings.Region) == "" {
+			missing = append(missing, "Volc_Region")
+		}
+		if strings.TrimSpace(settings.SecurityGroupID) == "" {
+			missing = append(missing, "Volc_SG_ID")
+		}
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("provider=%s 跳过: 配置不完整 (%s 缺失)", provider, strings.Join(missing, "/"))
+	}
+
+	return nil
 }
 
 // extractIP extracts IPv4 address from text using regex
@@ -75,7 +183,6 @@ func getCurrentIP(servicesStr string) string {
 			config.Log("WARNING", fmt.Sprintf("从 %s 获取IP失败: %v", url, err))
 			continue
 		}
-		
 
 		if resp.StatusCode == 200 {
 			body, _ := io.ReadAll(resp.Body)
@@ -103,35 +210,52 @@ func getCurrentIP(servicesStr string) string {
 	return ""
 }
 
-func updateSecurityGroup(settings *models.Settings, currentIP string) {
+func parsePorts(portsInput string) []int {
+	portsStr := strings.Split(portsInput, ",")
+	ports := make([]int, 0, len(portsStr))
+	seen := make(map[int]struct{}, len(portsStr))
+
+	for _, p := range portsStr {
+		p = strings.TrimSpace(p)
+		if val, err := strconv.Atoi(p); err == nil && val > 0 && val <= 65535 {
+			if _, ok := seen[val]; ok {
+				continue
+			}
+			seen[val] = struct{}{}
+			ports = append(ports, val)
+		}
+	}
+
+	return ports
+}
+
+func getPortsByProvider(settings *models.Settings, provider string) string {
+	switch provider {
+	case providerAWS:
+		if ports := strings.TrimSpace(settings.AWSPorts); ports != "" {
+			return ports
+		}
+	default:
+		if ports := strings.TrimSpace(settings.VolcenginePorts); ports != "" {
+			return ports
+		}
+	}
+
+	return strings.TrimSpace(settings.SSHPort)
+}
+
+func updateVolcengineSecurityGroup(settings *models.Settings, currentIP string, ports []int) {
 	conf := volcengine.NewConfig().
-		WithCredentials(credentials.NewStaticCredentials(settings.AccessKey, settings.SecretKey, "")).
+		WithCredentials(volcCredentials.NewStaticCredentials(settings.AccessKey, settings.SecretKey, "")).
 		WithRegion(settings.Region)
 
-	sess, err := session.NewSession(conf)
+	sess, err := volcSession.NewSession(conf)
 	if err != nil {
 		config.Log("ERROR", fmt.Sprintf("创建会话失败: %v", err))
 		return
 	}
 
 	vpcClient := vpc.New(sess)
-
-	// Parse Ports
-	portsStr := strings.Split(settings.SSHPort, ",")
-	var ports []int
-	for _, p := range portsStr {
-		p = strings.TrimSpace(p)
-		// Check for range like "8000-8005" - simpler to just support single ports for now, 
-		// or treat ranges? User asked for comma separated.
-		if val, err := strconv.Atoi(p); err == nil && val > 0 && val <= 65535 {
-			ports = append(ports, val)
-		}
-	}
-
-	if len(ports) == 0 {
-		config.Log("WARNING", "未配置有效的端口 (请使用逗号分隔，例如: 22,8080)")
-		return
-	}
 
 	// Get current rules
 	input := &vpc.DescribeSecurityGroupAttributesInput{
@@ -165,7 +289,7 @@ func updateSecurityGroup(settings *models.Settings, currentIP string) {
 		if existingRule != nil {
 			currentCidr := volcengine.StringValue(existingRule.CidrIp)
 			existingIP := strings.Split(currentCidr, "/")[0]
-			
+
 			if existingIP == currentIP {
 				config.Log("INFO", fmt.Sprintf("端口 %d: IP未变 (%s)，无需更新", targetPort, existingIP))
 				continue
@@ -191,7 +315,7 @@ func updateSecurityGroup(settings *models.Settings, currentIP string) {
 		// Authorize new rule
 		newCidr := fmt.Sprintf("%s/32", currentIP)
 		config.Log("INFO", fmt.Sprintf("端口 %d: 添加新规则 %s", targetPort, newCidr))
-		
+
 		_, err = vpcClient.AuthorizeSecurityGroupIngress(&vpc.AuthorizeSecurityGroupIngressInput{
 			SecurityGroupId: volcengine.String(settings.SecurityGroupID),
 			Protocol:        volcengine.String("TCP"),
@@ -209,4 +333,153 @@ func updateSecurityGroup(settings *models.Settings, currentIP string) {
 			config.Log("INFO", fmt.Sprintf("✓ 端口 %d: 已更新允许 %s", targetPort, newCidr))
 		}
 	}
+}
+
+func updateAWSLightsailFirewall(settings *models.Settings, currentIP string, ports []int) {
+	region := strings.TrimSpace(settings.AWSRegion)
+	normalizedRegion, regionChanged := normalizeAWSRegion(region)
+	if regionChanged {
+		config.Log("WARNING", fmt.Sprintf("provider=aws: 区域使用了可用区格式 (%s)，已自动纠正为 %s", region, normalizedRegion))
+	}
+
+	sess, err := awsSession.NewSession(&awsSDK.Config{
+		Region:      awsSDK.String(normalizedRegion),
+		Credentials: awsCredentials.NewStaticCredentials(settings.AWSAccessKey, settings.AWSSecretKey, ""),
+	})
+	if err != nil {
+		config.Log("ERROR", fmt.Sprintf("provider=aws: 创建AWS会话失败: %v", err))
+		return
+	}
+
+	client := awslightsail.New(sess)
+	instanceName := strings.TrimSpace(settings.AWSInstanceName)
+
+	output, err := client.GetInstancePortStates(&awslightsail.GetInstancePortStatesInput{
+		InstanceName: awsSDK.String(instanceName),
+	})
+	if err != nil {
+		config.Log("ERROR", fmt.Sprintf("provider=aws: 获取Lightsail端口状态失败: %v", err))
+		return
+	}
+
+	newCidr := fmt.Sprintf("%s/32", currentIP)
+
+	for _, targetPort := range ports {
+		matchedStates := findManagedLightsailStates(output.PortStates, targetPort)
+		if isLightsailPortSynced(matchedStates, targetPort, newCidr) {
+			config.Log("INFO", fmt.Sprintf("provider=aws 端口 %d: IP未变 (%s)，无需更新", targetPort, currentIP))
+			continue
+		}
+
+		closedProtocols := make(map[string]struct{}, len(matchedStates))
+		for _, state := range matchedStates {
+			protocol := strings.ToLower(awsSDK.StringValue(state.Protocol))
+			if protocol == "" {
+				continue
+			}
+			if _, ok := closedProtocols[protocol]; ok {
+				continue
+			}
+
+			config.Log("INFO", fmt.Sprintf("provider=aws 端口 %d: 关闭旧规则(protocol=%s)", targetPort, protocol))
+			_, err = client.CloseInstancePublicPorts(&awslightsail.CloseInstancePublicPortsInput{
+				InstanceName: awsSDK.String(instanceName),
+				PortInfo: &awslightsail.PortInfo{
+					FromPort: awsSDK.Int64(int64(targetPort)),
+					ToPort:   awsSDK.Int64(int64(targetPort)),
+					Protocol: awsSDK.String(protocol),
+				},
+			})
+			if err != nil {
+				config.Log("WARNING", fmt.Sprintf("provider=aws 端口 %d: 关闭旧规则失败: %v", targetPort, err))
+			}
+			closedProtocols[protocol] = struct{}{}
+		}
+
+		if len(matchedStates) == 0 {
+			config.Log("INFO", fmt.Sprintf("provider=aws 端口 %d: 未找到现有规则，将添加新规则", targetPort))
+		}
+
+		config.Log("INFO", fmt.Sprintf("provider=aws 端口 %d: 添加新规则 %s", targetPort, newCidr))
+		_, err = client.OpenInstancePublicPorts(&awslightsail.OpenInstancePublicPortsInput{
+			InstanceName: awsSDK.String(instanceName),
+			PortInfo: &awslightsail.PortInfo{
+				FromPort: awsSDK.Int64(int64(targetPort)),
+				ToPort:   awsSDK.Int64(int64(targetPort)),
+				Protocol: awsSDK.String(awslightsail.NetworkProtocolTcp),
+				Cidrs:    []*string{awsSDK.String(newCidr)},
+			},
+		})
+		if err != nil {
+			config.Log("ERROR", fmt.Sprintf("provider=aws 端口 %d: 授权失败: %v", targetPort, err))
+		} else {
+			config.Log("INFO", fmt.Sprintf("✓ provider=aws 端口 %d: 已更新允许 %s", targetPort, newCidr))
+		}
+	}
+}
+
+func normalizeAWSRegion(region string) (string, bool) {
+	region = strings.ToLower(strings.TrimSpace(region))
+	parts := strings.Split(region, "-")
+	if len(parts) < 3 {
+		return region, false
+	}
+
+	last := parts[len(parts)-1]
+	if len(last) != 2 {
+		return region, false
+	}
+	zoneSuffix := last[1]
+	if zoneSuffix < 'a' || zoneSuffix > 'z' {
+		return region, false
+	}
+	if last[0] < '0' || last[0] > '9' {
+		return region, false
+	}
+
+	parts[len(parts)-1] = last[:1]
+	return strings.Join(parts, "-"), true
+}
+
+func findManagedLightsailStates(portStates []*awslightsail.InstancePortState, targetPort int) []*awslightsail.InstancePortState {
+	matched := make([]*awslightsail.InstancePortState, 0, 2)
+	for _, state := range portStates {
+		if state == nil {
+			continue
+		}
+
+		fromPort := int(awsSDK.Int64Value(state.FromPort))
+		toPort := int(awsSDK.Int64Value(state.ToPort))
+		if targetPort < fromPort || targetPort > toPort {
+			continue
+		}
+
+		protocol := strings.ToLower(awsSDK.StringValue(state.Protocol))
+		if protocol == awslightsail.NetworkProtocolTcp || protocol == awslightsail.NetworkProtocolAll {
+			matched = append(matched, state)
+		}
+	}
+	return matched
+}
+
+func isLightsailPortSynced(states []*awslightsail.InstancePortState, targetPort int, targetCidr string) bool {
+	if len(states) != 1 {
+		return false
+	}
+
+	state := states[0]
+	if int(awsSDK.Int64Value(state.FromPort)) != targetPort || int(awsSDK.Int64Value(state.ToPort)) != targetPort {
+		return false
+	}
+	if strings.ToLower(awsSDK.StringValue(state.Protocol)) != awslightsail.NetworkProtocolTcp {
+		return false
+	}
+	if strings.ToLower(awsSDK.StringValue(state.State)) != "open" {
+		return false
+	}
+	if len(state.Cidrs) != 1 || len(state.CidrListAliases) > 0 || len(state.Ipv6Cidrs) > 0 {
+		return false
+	}
+
+	return strings.EqualFold(awsSDK.StringValue(state.Cidrs[0]), targetCidr)
 }

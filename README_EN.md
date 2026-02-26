@@ -1,8 +1,8 @@
-# Volcengine Whitelist Manager
+# Whitelist Manager
 
 <div align="center">
 
-**Intelligent Tool for Automatically Updating Volcengine Security Group Whitelist Access Rules**
+**Intelligent Tool for Automatically Updating Volcengine / AWS Lightsail Whitelist Access Rules**
 
 [![Go Version](https://img.shields.io/badge/Go-1.20+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -15,7 +15,7 @@
 
 ## 📖 Introduction
 
-Volcengine Whitelist Manager is an automation tool developed in Go that monitors your public IP address changes in real-time and automatically updates Volcengine security group whitelist access rules, ensuring only your current IP address can access your servers.
+Whitelist Manager is an automation tool developed in Go that monitors public IP changes in real-time and automatically updates cloud firewall whitelist rules, ensuring only your current IP can access your servers.
 
 ### 🎯 Use Cases
 
@@ -23,11 +23,13 @@ Volcengine Whitelist Manager is an automation tool developed in Go that monitors
 - **Security Hardening**: Restrict service access sources to prevent brute force attacks and unauthorized access
 - **Remote Work**: Automatically adapt to different network environments without manual security group rule modifications
 - **Multi-Port Management**: Manage whitelist access control for multiple service ports simultaneously
+- **Multi-Cloud Support**: Manage Volcengine security groups and AWS Lightsail firewall rules in one workflow
 
 ### ✨ Key Features
 
 - 🔄 **Automatic Monitoring**: Periodic public IP change detection (default 15 minutes, customizable)
-- 🔐 **Auto Security Group Updates**: Real-time synchronization of IP changes to Volcengine security group rules
+- 🔐 **Auto Whitelist Updates**: Real-time synchronization of IP changes to cloud firewall rules
+- ☁️ **Multi-Provider Support**: Supports Volcengine and AWS Lightsail
 - 🌐 **Web Management Interface**: Visual configuration panel and log monitoring
 - 🚀 **Multi-Port Support**: Configure multiple ports at once (e.g., 22,8080,3389), comma-separated
 - 📊 **Complete Log Recording**: All operations are traceable with pagination support and clear function
@@ -41,7 +43,7 @@ Volcengine Whitelist Manager is an automation tool developed in Go that monitors
 ## 🏗️ Project Architecture
 
 ```text
-volcengine-whitelist-manager/
+whitelist-manager/
 ├── cmd/
 │   └── server/
 │       └── main.go           # Application entry point
@@ -70,7 +72,7 @@ volcengine-whitelist-manager/
 - **Web Framework**: [Gin](https://github.com/gin-gonic/gin) - High-performance HTTP framework
 - **Task Scheduling**: [Cron v3](https://github.com/robfig/cron) - Reliable scheduled task scheduler
 - **Database**: [GORM](https://gorm.io/) + SQLite - Lightweight data persistence
-- **Cloud Service SDK**: [Volcengine Go SDK](https://github.com/volcengine/volcengine-go-sdk) - Official SDK
+- **Cloud Service SDK**: [Volcengine Go SDK](https://github.com/volcengine/volcengine-go-sdk), [AWS SDK for Go](https://github.com/aws/aws-sdk-go)
 
 ---
 
@@ -80,7 +82,7 @@ volcengine-whitelist-manager/
 
 - **Build Environment**: Go 1.20 or higher
 - **Runtime Environment**: Linux / macOS / Windows
-- **Network Requirements**: Access to Volcengine API and public IP query services
+- **Network Requirements**: Access to cloud provider APIs and public IP query services
 
 ### Installation
 
@@ -119,10 +121,11 @@ go run cmd/server/main.go
 
    | Configuration | Description | Example |
    |--------------|-------------|---------|
-   | Access Key | Volcengine access key | AKLT... |
-   | Secret Key | Volcengine secret key | *** |
-   | Region | Security group region | `cn-beijing`, `cn-shanghai` |
-   | Security Group ID | Target security group ID | `sg-xxxxxx` |
+   | Provider | Cloud provider | `volcengine` / `aws` |
+   | Access Key | Cloud API access key | `AKLT...` / `AKIA...` |
+   | Secret Key | Cloud API secret key | *** |
+   | Region | Resource region | `cn-beijing`, `ap-southeast-1` |
+   | Security Group ID | Volcengine: security group ID; AWS: Lightsail instance name | `sg-xxxxxx` / `my-lightsail-instance` |
    | Ports | Ports to manage | `22` or `22,8080,3389` |
    | Check Interval | Check interval | `15` (minutes) |
    | IP Services | IP query service list | Multiple backup sources pre-configured |
@@ -143,7 +146,7 @@ go run cmd/server/main.go
 - Provide "Run Now" button
 
 #### Settings Page (`/settings`)
-- Configure Volcengine credentials
+- Select provider and configure credentials
 - Set check interval and ports
 - Manage IP query service list
 

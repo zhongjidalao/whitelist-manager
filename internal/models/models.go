@@ -6,10 +6,18 @@ import (
 
 type Settings struct {
 	ID              uint   `gorm:"primaryKey"`
-	AccessKey       string `gorm:"size:100"`
-	SecretKey       string `gorm:"size:100"`
-	Region          string `gorm:"size:50;default:'cn-beijing'"`
-	SecurityGroupID string `gorm:"size:50"`
+	Provider        string `gorm:"size:20;default:'volcengine'"` // Legacy single provider field
+	Providers       string `gorm:"size:50;default:'volcengine'"` // Comma-separated providers
+	AccessKey       string `gorm:"size:100"`                     // Volcengine Access Key
+	SecretKey       string `gorm:"size:100"`                     // Volcengine Secret Key
+	Region          string `gorm:"size:50;default:'cn-beijing'"` // Volcengine Region
+	SecurityGroupID string `gorm:"size:255"`                     // Volcengine Security Group ID
+	VolcenginePorts string `gorm:"size:50;default:'22'"`
+	AWSAccessKey    string `gorm:"size:100"` // AWS Access Key
+	AWSSecretKey    string `gorm:"size:100"` // AWS Secret Key
+	AWSRegion       string `gorm:"size:50;default:'ap-southeast-1'"`
+	AWSInstanceName string `gorm:"size:255"`
+	AWSPorts        string `gorm:"size:50;default:'22'"`
 	SSHPort         string `gorm:"size:50;default:'22'"`
 	CheckInterval   int    `gorm:"default:900"` // Seconds
 	IPServices      string `gorm:"type:text;default:'https://myip.ipip.net\nhttps://ddns.oray.com/checkip\nhttps://ip.3322.net\nhttps://v4.yinghualuo.cn/bejson'"`

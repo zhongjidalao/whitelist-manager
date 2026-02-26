@@ -3,6 +3,7 @@ module volcengine-whitelist-manager
 go 1.20
 
 require (
+	github.com/aws/aws-sdk-go v1.55.8
 	github.com/gin-gonic/gin v1.9.1
 	github.com/glebarez/sqlite v1.11.0
 	github.com/robfig/cron/v3 v3.0.1

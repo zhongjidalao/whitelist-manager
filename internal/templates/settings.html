@@ -9,44 +9,89 @@
             <div class="card-body">
                 <form method="post">
                     <div class="mb-3">
-                        <label for="access_key" class="form-label">Volcengine Access Key ID</label>
-                        <input type="text" class="form-control" id="access_key" name="access_key" value="{{ .Settings.AccessKey }}" required>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="secret_key" class="form-label">Volcengine Secret Access Key</label>
-                        <input type="password" class="form-control" id="secret_key" name="secret_key" value="{{ .Settings.SecretKey }}" required>
-                        <div class="form-text">密钥将明文保存在本地 SQLite 数据库中，请确保服务器安全。</div>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="region" class="form-label">区域 (Region)</label>
-                            <input type="text" class="form-control" id="region" name="region" value="{{ .Settings.Region }}" required>
+                        <label class="form-label">云厂商（可多选）</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="provider_volcengine" name="providers" value="volcengine" {{ if .VolcEnabled }}checked{{ end }}>
+                            <label class="form-check-label" for="provider_volcengine">Volcengine</label>
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="security_group_id" class="form-label">安全组 ID</label>
-                            <input type="text" class="form-control" id="security_group_id" name="security_group_id" value="{{ .Settings.SecurityGroupID }}" required>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="provider_aws" name="providers" value="aws" {{ if .AWSEnabled }}checked{{ end }}>
+                            <label class="form-check-label" for="provider_aws">AWS Lightsail</label>
+                        </div>
+                        <div class="form-text">可同时启用多个供应商；每个供应商使用独立配置。</div>
+                    </div>
+
+                    <div class="border rounded p-3 mb-3" id="volcengine_section">
+                        <h6 class="mb-3">Volcengine 配置</h6>
+                        <div class="mb-3">
+                            <label for="volcengine_access_key" class="form-label">Volcengine Access Key ID</label>
+                            <input type="text" class="form-control" id="volcengine_access_key" name="volcengine_access_key" value="{{ .Settings.AccessKey }}">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="volcengine_secret_key" class="form-label">Volcengine Secret Access Key</label>
+                            <input type="password" class="form-control" id="volcengine_secret_key" name="volcengine_secret_key" value="{{ .Settings.SecretKey }}">
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="volcengine_region" class="form-label">区域 (Region)</label>
+                                <input type="text" class="form-control" id="volcengine_region" name="volcengine_region" value="{{ .Settings.Region }}" placeholder="cn-beijing">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="volcengine_security_group_id" class="form-label">安全组 ID</label>
+                                <input type="text" class="form-control" id="volcengine_security_group_id" name="volcengine_security_group_id" value="{{ .Settings.SecurityGroupID }}">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="volcengine_ports" class="form-label">管理端口 (多个用逗号分隔)</label>
+                            <input type="text" class="form-control" id="volcengine_ports" name="volcengine_ports" value="{{ if .Settings.VolcenginePorts }}{{ .Settings.VolcenginePorts }}{{ else }}{{ .Settings.SSHPort }}{{ end }}" placeholder="22,8080">
                         </div>
                     </div>
 
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="ssh_port" class="form-label">SSH 端口 (多个用逗号分隔)</label>
-                            <input type="text" class="form-control" id="ssh_port" name="ssh_port" value="{{ .Settings.SSHPort }}" placeholder="22,8080" required>
+                    <div class="border rounded p-3 mb-3" id="aws_section">
+                        <h6 class="mb-3">AWS Lightsail 配置</h6>
+                        <div class="mb-3">
+                            <label for="aws_access_key" class="form-label">AWS Access Key ID</label>
+                            <input type="text" class="form-control" id="aws_access_key" name="aws_access_key" value="{{ .Settings.AWSAccessKey }}">
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="check_interval_value" class="form-label">检查间隔</label>
-                            <div class="input-group">
-                                <input type="number" class="form-control" id="check_interval_value" name="check_interval_value" value="{{ .CheckIntervalValue }}" required min="1">
-                                <select class="form-select text-center" id="check_interval_unit" name="check_interval_unit" style="flex-grow: 0 !important; width: fit-content;">
-                                    <option value="seconds" {{ if eq .CheckIntervalUnit "seconds" }}selected{{ end }}>秒</option>
-                                    <option value="minutes" {{ if eq .CheckIntervalUnit "minutes" }}selected{{ end }}>分钟</option>
-                                    <option value="hours" {{ if eq .CheckIntervalUnit "hours" }}selected{{ end }}>小时</option>
-                                </select>
+                        
+                        <div class="mb-3">
+                            <label for="aws_secret_key" class="form-label">AWS Secret Access Key</label>
+                            <input type="password" class="form-control" id="aws_secret_key" name="aws_secret_key" value="{{ .Settings.AWSSecretKey }}">
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="aws_region" class="form-label">区域 (Region)</label>
+                                <input type="text" class="form-control" id="aws_region" name="aws_region" value="{{ .Settings.AWSRegion }}" placeholder="ap-northeast-1">
                             </div>
-                            <input type="hidden" id="check_interval_seconds" name="check_interval" value="{{ .Settings.CheckInterval }}">
+                            <div class="col-md-6 mb-3">
+                                <label for="aws_instance_name" class="form-label">Lightsail 实例名称</label>
+                                <input type="text" class="form-control" id="aws_instance_name" name="aws_instance_name" value="{{ .Settings.AWSInstanceName }}">
+                            </div>
                         </div>
+                        <div class="mb-3">
+                            <label for="aws_ports" class="form-label">管理端口 (多个用逗号分隔)</label>
+                            <input type="text" class="form-control" id="aws_ports" name="aws_ports" value="{{ if .Settings.AWSPorts }}{{ .Settings.AWSPorts }}{{ else }}{{ .Settings.SSHPort }}{{ end }}" placeholder="22,8080">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-text">密钥将明文保存在本地 SQLite 数据库中，请确保服务器安全。</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="check_interval_value" class="form-label">检查间隔</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="check_interval_value" name="check_interval_value" value="{{ .CheckIntervalValue }}" required min="1">
+                            <select class="form-select text-center" id="check_interval_unit" name="check_interval_unit" style="flex-grow: 0 !important; width: fit-content;">
+                                <option value="seconds" {{ if eq .CheckIntervalUnit "seconds" }}selected{{ end }}>秒</option>
+                                <option value="minutes" {{ if eq .CheckIntervalUnit "minutes" }}selected{{ end }}>分钟</option>
+                                <option value="hours" {{ if eq .CheckIntervalUnit "hours" }}selected{{ end }}>小时</option>
+                            </select>
+                        </div>
+                        <input type="hidden" id="check_interval_seconds" name="check_interval" value="{{ .Settings.CheckInterval }}">
                     </div>
 
                     <div class="mb-3">
@@ -69,6 +114,24 @@
     const intervalValueInput = document.getElementById('check_interval_value');
     const intervalUnitSelect = document.getElementById('check_interval_unit');
     const intervalSecondsInput = document.getElementById('check_interval_seconds');
+    const providerVolcengineCheckbox = document.getElementById('provider_volcengine');
+    const providerAWSCheckbox = document.getElementById('provider_aws');
+    const volcengineSection = document.getElementById('volcengine_section');
+    const awsSection = document.getElementById('aws_section');
+    const volcengineRequiredFields = [
+        document.getElementById('volcengine_access_key'),
+        document.getElementById('volcengine_secret_key'),
+        document.getElementById('volcengine_region'),
+        document.getElementById('volcengine_security_group_id'),
+        document.getElementById('volcengine_ports')
+    ];
+    const awsRequiredFields = [
+        document.getElementById('aws_access_key'),
+        document.getElementById('aws_secret_key'),
+        document.getElementById('aws_region'),
+        document.getElementById('aws_instance_name'),
+        document.getElementById('aws_ports')
+    ];
 
     function updateIntervalSeconds() {
         let value = parseInt(intervalValueInput.value);
@@ -87,11 +150,31 @@
         intervalSecondsInput.value = seconds;
     }
 
+    function setFieldsRequired(fields, required) {
+        fields.forEach(field => {
+            field.required = required;
+        });
+    }
+
+    function updateProviderSections() {
+        const volcEnabled = providerVolcengineCheckbox.checked;
+        const awsEnabled = providerAWSCheckbox.checked;
+
+        volcengineSection.style.display = volcEnabled ? '' : 'none';
+        awsSection.style.display = awsEnabled ? '' : 'none';
+
+        setFieldsRequired(volcengineRequiredFields, volcEnabled);
+        setFieldsRequired(awsRequiredFields, awsEnabled);
+    }
+
     intervalValueInput.addEventListener('input', updateIntervalSeconds);
     intervalUnitSelect.addEventListener('change', updateIntervalSeconds);
+    providerVolcengineCheckbox.addEventListener('change', updateProviderSections);
+    providerAWSCheckbox.addEventListener('change', updateProviderSections);
 
     // Initial update on page load
     updateIntervalSeconds();
+    updateProviderSections();
 </script>
 
 {{ template "footer.html" . }}
